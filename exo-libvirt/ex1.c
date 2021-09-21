@@ -1,4 +1,5 @@
 /* example ex1.c */
+/* Utilisation de vitConnectOpen pour ouvrir une connexion vers un hyperviseur */
 /* compile with: gcc -g -Wall ex1.c -o ex -lvirt */
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +14,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Failed to open connection to qemu:///system\n");
 		return 1;
 	}
+	printf("Connexion opened\n");
 	virConnectClose(conn);
 	return 0;
 }
