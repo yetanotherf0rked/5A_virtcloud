@@ -2,6 +2,25 @@
 #include <stdlib.h>
 #include <libvirt/libvirt.h>
 
+void domainDisplay(
+		int numDomains,
+		virDomainPtr* domains,
+		virDomainInfo domInfo
+	){
+		for (int i=0; i<numDomains; i++) {
+			virDomainGetInfo(domains[i], &domInfo);
+			printf(" \tid : %i, name : %s\n \t\tstate : %d\n \t\tmaxMem : %li\n \t\tmemory : %li\n \t\tnrvirtcpu : %d\n \t\tcpuTime : %lli\n\n ",
+					virDomainGetID(domains[i]),
+					virDomainGetName(domains[i]),
+					domInfo.state,
+					virDomainGetMaxMemory(domains[i]),
+					domInfo.memory,
+					domInfo.nrVirtCpu,
+					domInfo.cpuTime
+			);
+	}
+}
+
 int main(int argc, char *argv[]) {
 
 	virConnectPtr conn;
@@ -26,58 +45,65 @@ int main(int argc, char *argv[]) {
 	fprintf(stdout, "Node free memory: %llu\n", node_free_memory);
 
 	// Exercice 3 
-	virDomainPtr *allDomains;
-	int numDomains = 0;
-	char **inactiveDomains; // inactive domain names (as they don't have IDs)
-	int *activeDomains; // active domains ids
-	int i;
-	int numActiveDomains = virConnectNumOfDomains(conn);
-	int numInactiveDomains = virConnectNumOfDefinedDomains(conn);
-	virDomainPtr dom;
-	virDomainInfo * dominfo;
+	virDomainPtr *domains;
+	virDomainInfo domInfo;
+	
+	// Active Domains
+	int activeDomains = virConnectListAllDomains(conn, &domains, VIR_CONNECT_LIST_DOMAINS_ACTIVE);
+	
+	printf("====== ACTIVE DOMAIN IDS\n");
+	if (activeDomains < 0)
+		printf("No active domain\n");
+	else
+		domainDisplay(activeDomains, domains, domInfo);
+	
+	free(domains);
 
-	allDomains = malloc(
-		sizeof(virDomainPtr) * (numActiveDomains + numInactiveDomains)
-	);
-	inactiveDomains = malloc(
-		sizeof(char*) * numInactiveDomains
-	);
-	activeDomains = malloc(
-		sizeof(int) * numActiveDomains
-	);
-	numActiveDomains = virConnectListDomains(
-		conn, 
-		activeDomains, 
-		numActiveDomains
-	);
-	numInactiveDomains = virConnectListDefinedDomains(
-		conn,
-		inactiveDomains,
-		numInactiveDomains
-	);
+	// Inactive Domains
+	int inactiveDomains = virConnectListAllDomains(conn, &domains, VIR_CONNECT_LIST_DOMAINS_INACTIVE);
 
-	for (i=0; i<numActiveDomains; i++) {
-		dom = virDomainLookupByID(conn, activeDomains[i]);
-		printf(
-			"  ID: %d, Name: %s (active)\n", 
-			activeDomains[i], 
-			virDomainGetName(dom)
-		);
-		virDomainGetInfo(dom, dominfo);
-		printf("    state: %c\n", dominfo->state);
-		printf("    maxMem: %ld\n", dominfo->maxMem);
-		printf("    memory: %ld\n", dominfo->memory);
-		printf("    nrVirtCpu: %d\n", dominfo->nrVirtCpu);
-		printf("    cpuTime: %lld\n", dominfo->cpuTime);
+	printf("====== INACTIVE DOMAIN IDS\n");
+	if (inactiveDomains < 0)
+		printf("No inactive domain \n");
+	else
+		domainDisplay(inactiveDomains, domains, domInfo);
+
+	free(domains);
+
+
+	// Exercice 5
+	virDomainPtr vm = NULL;
+	activeDomains = virConnectListAllDomains(conn, &domains, VIR_CONNECT_LIST_DOMAINS_ACTIVE);
+	if (activeDomains <= 0)
+		printf("No active domain to shutdown/restart\n");
+	else {
+		vm = domains[0];
+		printf("Shutdown domain\n");
+		virDomainDestroy(vm);
+		domainDisplay(activeDomains, domains, domInfo);
+
+		printf("Restart domain\n");
+		virDomainCreate(vm);
+		domainDisplay(activeDomains, domains, domInfo);
+
+		free(domains);
+		vm = NULL;
 	}
 
-	// for (i=0; i<numActiveDomains; i++) {
-		
-	// }
+	// Exercice 6
+	const char* target = "qemu+ssh://172.30.3.39/system";
+	virConnectPtr targetConn = virConnectOpenAuth(target, virConnectAuthPtrDefault, 0);
+
+	// On migre la première vm active
+	activeDomains = virConnectListAllDomains(conn, &domains, VIR_CONNECT_LIST_DOMAINS_ACTIVE);
+
+	if (activeDomains <= 0)
+		printf("No active domain to shutdown/restart\n");
+	else {
+		vm = domains[0];
+		virDomainMigrate3(vm,targetConn, NULL, 0, VIR_MIGRATE_UNSAFE);
+	}
 	
-	
-	free(activeDomains);
-	free(inactiveDomains);
 	free(host);
 	virConnectClose(conn);
 	return 0;
